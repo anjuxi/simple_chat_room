@@ -1,0 +1,20 @@
+# 编译产物
+*.exe
+*.obj
+*.o
+*.dll
+
+# 调试文件
+*.pdb
+*.ilk
+*.exp
+
+# 编辑器
+.vs/
+.vscode/
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db
