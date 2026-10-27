@@ -1,47 +1,49 @@
-# 简易聊天室
+English version:
+
+# Simple Chat Room
 
 [![C](https://img.shields.io/badge/language-C-blue.svg)](https://en.wikipedia.org/wiki/C_(programming_language))
 [![GCC](https://img.shields.io/badge/compiler-GCC%2FMinGW-orange.svg)](https://gcc.gnu.org/)
 [![Windows](https://img.shields.io/badge/platform-Windows-0078D6.svg)](https://www.microsoft.com/windows)
 [![WinSock2](https://img.shields.io/badge/network-WinSock%202.2-green.svg)](https://learn.microsoft.com/windows/win32/winsock/winsock-functions)
 
-基于 WinSock2 的 TCP 简易聊天室，服务端多线程并发处理，客户端异步接收 + 阻塞输入双线程配合。
+A simple TCP chat room built on WinSock2. The server handles concurrent clients with one thread per connection. The client uses two threads: one for async receive, one for blocking input.
 
 ---
 
-## ✨ 功能特性
+## Features
 
-| 特性 | 说明 |
+| Feature | Description |
 |------|------|
-| 🧑‍🤝‍🧑 多客户端并发 | 服务端每连接一个新线程，上限 100 人 |
-| 🔐 在线注册 | 用户名唯一校验，下线后名字自动释放 |
-| 📢 实时广播 | 聊天消息、加入/离开通知实时广播给所有在线用户 |
-| 🎨 动态 Prompt | 客户端 prompt 根据注册状态自动切换 `[用户名]>` / `(未注册)>` |
-| 🔒 线程安全 | 链表操作、控制台输出均有临界区保护；广播在锁外发送，慢客户端不阻塞整体 |
-| 📝 全量日志 | 服务端带时间戳的完整聊天记录：连接/注册/聊天/离开 |
-| 🛑 优雅退出 | 服务端 Ctrl+C 自动关闭所有连接、释放资源；客户端 `/quit` 干净退出 |
-| 📱 可配置 IP | 客户端支持命令行参数指定服务端 IP，默认 `127.0.0.1` |
+| Multi-client concurrency | Server creates one thread per connection, max 100 clients |
+| Online registration | Username uniqueness is checked; the name is released when the user disconnects |
+| Real-time broadcast | Chat messages and join/leave notices are broadcast to all online users |
+| Dynamic prompt | Client prompt switches between `[username]>` and `(unregistered)>` based on registration state |
+| Thread safety | Linked-list operations and console output are protected by critical sections; broadcasts are sent outside the lock so slow clients don't block everyone |
+| Full logging | Server keeps a timestamped chat log: connect/register/chat/leave |
+| Graceful shutdown | Ctrl+C on the server closes all connections and frees resources; `/quit` exits the client cleanly |
+| Configurable IP | Client accepts the server IP as a command-line argument; defaults to `127.0.0.1` |
 
 ---
 
-## 🏗️ 架构
+## Architecture
 
-### 线程模型
+### Thread model
 
 ```mermaid
 flowchart TB
-    subgraph 服务端 server.c
-        A[main accept 循环] -->|每新建一条连接| B[CreateThread client_handler]
-        B --> C[ClientNode 链表]
+    subgraph Server server.c
+        A[main accept loop] -->|new connection| B[CreateThread client_handler]
+        B --> C[ClientNode linked list]
         C --> D{{CRITICAL_SECTION cs}}
         E[server_log] --> F{{CRITICAL_SECTION g_console_cs}}
         B -.->|server_log| E
     end
-    subgraph 客户端 client.c
-        G[main 主线程<br/>阻塞 fgets 输入]
-        H[receive_thread 接收线程]
+    subgraph Client client.c
+        G[main thread<br/>blocking fgets input]
+        H[receive_thread]
         G -.->|print_line_redraw_prompt| I{{CRITICAL_SECTION g_console_cs}}
-        H -.->|收消息+重绘 prompt| I
+        H -.->|receive + redraw prompt| I
     end
     B <-->|TCP| H
     style D fill:#4CAF50,color:#fff
@@ -49,47 +51,47 @@ flowchart TB
     style I fill:#FF9800,color:#fff
 ```
 
-### 通信流程（注册 → 聊天）
+### Message flow (register → chat)
 
 ```mermaid
 sequenceDiagram
-    participant Client as 客户端
-    participant Server as 服务端
+    participant Client as Client
+    participant Server as Server
 
     Client->>Server: REGISTER:Alice\n
     Server->>Server: is_username_online_locked("Alice")
     Server->>Client: REGISTER_OK\n
-    Server->>其他客户端: [系统]: Alice 加入了聊天室\n
+    Server->>Other clients: [系统]: Alice 加入了聊天室\n
 
-    loop 每条聊天消息
+    loop each chat message
         Client->>Server: hi everyone\n
         Server->>Server: snapshot_online_locked + LeaveCriticalSection
-        Server->>其他客户端: [Alice]: hi everyone\n
+        Server->>Other clients: [Alice]: hi everyone\n
         Server->>Server: server_log "[CHAT] [Alice] 说: hi everyone"
     end
 
-    Client->>Server: FIN (断开)
+    Client->>Server: FIN (disconnect)
     Server->>Server: remove_online_client_locked
-    Server->>其他客户端: [系统]: Alice 离开了聊天室\n
+    Server->>Other clients: [系统]: Alice 离开了聊天室\n
     Server->>Server: server_log "[LEAVE] Alice(IP) 下线"
 ```
 
 ---
 
-## 🧩 依赖
+## Dependencies
 
-| 依赖 | 说明 |
+| Dependency | Notes |
 |------|------|
-| GCC / MinGW-w64 | 推荐，本项目用 `-O2 -Wall -Wextra` 编译通过 |
-| MSVC (可选) | `#ifdef _MSC_VER` 已包含 `#pragma comment(lib, ...)`，无需额外命令行链接 |
-| `ws2_32.lib` | WinSock 2.2，网络编程核心库 |
-| `wsock32.lib` | WinSock 1.x 兼容层，提供 `inet_ntoa` 等函数 |
+| GCC / MinGW-w64 | Recommended. This project compiles with `-O2 -Wall -Wextra` |
+| MSVC (optional) | `#ifdef _MSC_VER` already includes `#pragma comment(lib, ...)`, so no extra link flags are needed |
+| `ws2_32.lib` | WinSock 2.2, core networking library |
+| `wsock32.lib` | WinSock 1.x compatibility layer, provides `inet_ntoa` and similar functions |
 
-> 本项目**只有 Windows** 能跑（用了 `winsock2.h` 和 Win32 线程 API）。如果要移植到 Linux，把 `winsock2.h` 换成 `sys/socket.h`、把 `CreateThread` 换成 `pthread_create`、把 `CRITICAL_SECTION` 换成 `pthread_mutex_t` 即可。
+> This project is **Windows-only** (it uses `winsock2.h` and Win32 thread APIs). To port it to Linux, replace `winsock2.h` with `sys/socket.h`, `CreateThread` with `pthread_create`, and `CRITICAL_SECTION` with `pthread_mutex_t`.
 
 ---
 
-## 🛠️ 构建
+## Build
 
 ### Windows + MinGW
 
@@ -105,129 +107,129 @@ cl /O2 /W3 server.c user32.lib ws2_32.lib wsock32.lib
 cl /O2 /W3 client.c user32.lib ws2_32.lib wsock32.lib
 ```
 
-编译完成后会生成 `server.exe` 和 `client.exe`。
+This produces `server.exe` and `client.exe`.
 
 ---
 
-## ▶️ 运行
+## Run
 
-### 启动服务端
+### Start the server
 
 ```bash
 ./server.exe
 ```
 
-默认监听 `0.0.0.0:8888`。`Ctrl+C` 退出。
+Listens on `0.0.0.0:8888` by default. Press `Ctrl+C` to exit.
 
-### 启动客户端
+### Start a client
 
 ```bash
-./client.exe                # 默认连接 127.0.0.1:8888
-./client.exe 192.168.10.12   # 连接指定 IP
+./client.exe                # connects to 127.0.0.1:8888 by default
+./client.exe 192.168.10.12  # connect to a specific IP
 ```
 
-### 交互命令
+### Commands
 
-| 输入 | 作用 |
+| Input | Action |
 |------|------|
-| `REGISTER:你的用户名` | 注册并登录（用户名 1~31 字符） |
-| `/quit` 或 `/exit` | 退出客户端 |
-| 其他任意内容 | 发送为聊天消息（未注册时服务端会拒绝） |
+| `REGISTER:your_username` | Register and log in (username: 1–31 characters) |
+| `/quit` or `/exit` | Exit the client |
+| Anything else | Sent as a chat message (the server rejects it if you are not registered) |
 
 ---
 
-## 📡 通信协议
+## Protocol
 
-所有消息均为 `\n`（LF）结尾的纯文本，无额外序列化。
+All messages are plain text ending with `\n` (LF). There is no extra serialization.
 
-### 客户端 → 服务端
+### Client → server
 
-| 前缀 | 格式 | 说明 |
+| Prefix | Format | Description |
 |------|------|------|
-| `REGISTER:` | `REGISTER:<用户名>\n` | 注册并登录 |
-| 其他 | `<任意内容>\n` | 聊天消息（未注册时被忽略） |
+| `REGISTER:` | `REGISTER:<username>\n` | Register and log in |
+| Other | `<any content>\n` | Chat message (ignored if not registered) |
 
-### 服务端 → 客户端
+### Server → client
 
-| 前缀 | 格式 | 说明 |
+| Prefix | Format | Description |
 |------|------|------|
-| `REGISTER_OK` | `REGISTER_OK\n` | 注册成功 |
-| `REGISTER_FAIL:` | `REGISTER_FAIL:<原因>\n` | 注册失败 |
-| `[系统]` | `[系统]: ...\n` | 系统通知（加入、离开） |
-| `[用户名]` | `[用户名]: <消息>\n` | 聊天广播 |
+| `REGISTER_OK` | `REGISTER_OK\n` | Registration succeeded |
+| `REGISTER_FAIL:` | `REGISTER_FAIL:<reason>\n` | Registration failed |
+| `[系统]` | `[系统]: ...\n` | System notice (join/leave) |
+| `[username]` | `[username]: <message>\n` | Chat broadcast |
 
 ---
 
-## 📸 运行截图
+## Screenshots
 
-### 服务端日志（带时间戳）
+### Server log (timestamped)
 
-![服务端运行情况](./服务端运行情况.png)
+![Server running](./服务端运行情况.png)
 
-### 客户端 1（Anjuxi）
+### Client 1 (Anjuxi)
 
-![客户端1运行情况](./客户端1运行情况.png)
+![Client 1 running](./客户端1运行情况.png)
 
-### 客户端 2（Ailan）
+### Client 2 (Ailan)
 
-![客户端2运行情况](./客户端2运行情况.png)
+![Client 2 running](./客户端2运行情况.png)
 
 ---
 
-## 📁 项目结构
+## Project Structure
 
 ```
 .
-├── server.c                # 服务端源码（400 行）
-├── client.c                # 客户端源码（195 行）
-├── server.exe              # 编译产物
-├── client.exe              # 编译产物
-├── 服务端运行情况.png       # 文档配图
-├── 客户端1运行情况.png      # 文档配图
-├── 客户端2运行情况.png      # 文档配图
+├── server.c                # server source (~400 lines)
+├── client.c                # client source (~195 lines)
+├── server.exe              # build output
+├── client.exe              # build output
+├── 服务端运行情况.png       # screenshot
+├── 客户端1运行情况.png      # screenshot
+├── 客户端2运行情况.png      # screenshot
 └── README.md
 ```
 
 ---
 
-## 🔧 核心实现要点
+## Implementation Notes
 
-### 锁外广播（避免慢客户端阻塞）
+### Broadcast outside the lock (avoid slow clients blocking)
 
 ```mermaid
 flowchart LR
-    A[EnterCriticalSection] --> B[snapshot_online_locked<br/>数组形式快照]
+    A[EnterCriticalSection] --> B[snapshot_online_locked<br/>copy into array]
     B --> C[LeaveCriticalSection]
-    C --> D[broadcast_via_snapshot<br/>锁外遍历 send]
+    C --> D[broadcast_via_snapshot<br/>iterate and send outside lock]
     D --> E[free_snapshot]
     style D fill:#FFEB3B
 ```
 
-链表在持锁期间只做"快照"（把 sock 拷贝到一个独立数组），真正的 `send()` 在锁外遍历快照执行。这样某个客户端网络很慢或断开都不会卡住其他线程，也不会让 `accept` 线程被饿死。
+While holding the lock, the linked list is only used to take a snapshot: socket handles are copied into a separate array. The actual `send()` calls run outside the lock. This way, a slow or disconnected client won't block other threads, and the `accept` thread won't be starved.
 
-### 客户端控制台无锁输入 + 加锁输出
+### Client console: lock-free input, locked output
 
-`fgets()` 是阻塞的，如果放进锁里会导致接收线程也打不了控制台。所以策略是：
+`fgets()` blocks. If it ran inside the lock, the receive thread would not be able to write to the console. The approach is:
 
-- **输入**：主线程在锁外 `fgets`，输入完才抢锁重绘 prompt
-- **输出**：接收线程收到消息后，抢锁原子执行"清当前行 → 打消息 → 重绘 prompt"三步
+- **Input**: the main thread calls `fgets` outside the lock; only after input does it take the lock to redraw the prompt.
+- **Output**: when the receive thread gets a message, it takes the lock and atomically does three things: clear the current line, print the message, redraw the prompt.
 
-两个线程通过同一把 `g_console_cs` 协调，prompt 永远可见。
+Both threads share `g_console_cs`, so the prompt stays visible.
 
-### 用户名唯一性 = 在线链表查重
+### Username uniqueness = check the online list
 
-只维护一张在线链表 `online_clients`，**不**额外维护"已注册用户名表"。注册时直接遍历链表查重，下线时从链表移除即视为名字释放。这样不会出现"注册一次永久占用"的问题，也省了一张注册表。
-
----
-
-## 👤 作者
-
-**谙弆悕博士（Ailan Anjuxi）**
-
-📧 邮箱：<anjuxi.ME@outlook.com>
-
-📞 SIP 电话：[sip:anjuxi@sip.linphone.org](sip:anjuxi@sip.linphone.org)
+Only one linked list, `online_clients`, is maintained. There is no separate "registered usernames" table. Registration walks the list to check for duplicates; removing a client from the list on disconnect releases the name. This avoids permanently reserving a name after one registration and saves an extra table.
 
 ---
 
-*本项目基于 C 语言和 Win32 API，仅用于学习 TCP 网络编程与多线程同步。*
+## Author
+
+**Ailan Anjuxi (谙弆悕博士)**
+
+Email: <anjuxi.ME@outlook.com>
+
+SIP: [sip:anjuxi@sip.linphone.org](sip:anjuxi@sip.linphone.org)
+
+---
+
+*This project uses C and the Win32 API. It is intended for learning TCP network programming and multithreaded synchronization.*
